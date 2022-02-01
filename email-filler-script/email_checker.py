@@ -99,6 +99,51 @@ class EmailChecker:
         return op, ed
     
     """
+    If multiple distinct patterns are found, the user is asked to confirm each, whether they should be marked correct or not.
+    """
+    def checking_patterns(self) -> None:
+        op, ed = self.extract_op_ed(self.m)
+        
+        # if the opening and ending patterns are no logner distinct, the user may remove 
+        if len(op) != 1 or len(ed) != 1:
+            print("Multiple patterns were detected.")
+            print("The initial pattern passed was:", filter)
+            if len(op) != 1:
+                for opening in list(op):
+                    is_replaced = input("Should {} be considered correct? (y/n)".format(opening))
+                    if is_replaced == "n":
+                        # removing both from the list and the list of matches
+                        op.remove(opening)
+                        for match in self.m:
+                            if opening in match:
+                                self.m.remove(match)
+            if len(ed) != 1:
+                for ending in list(ed):
+                    is_replaced = input("Should {} be considered correct? (y/n)".format(ending))
+                    if is_replaced == "n":
+                        ed.remove(ending)
+                        for match in self.m:
+                            if ending in match:
+                                self.m.remove(match)
+    
+
+    """
+    Updates the CSV in the case of no matching headers and regex matches.
+    """
+    def email_cleaner(self) -> None:
+        for match in self.m:
+            label = re.search(r"[a-zA-Z\s]+", match).group(0)
+            label = label.strip()
+
+            if label not in self.header:
+                if label.lower() in self.lowered_header:
+                    replace = input("Would you like to replace {} from the CSV with {} in the template? (y/n)".format(self.header[self.lowered_header.index(label.lower())], label))
+                    if replace == "y":
+                        self.header[self.lowered_header.index(label)]= label
+                    if replace == "n":
+                        self.m.remove(match)
+    
+    """
     Gets of the email from the given template.
 
     @return the subject of the email
@@ -157,11 +202,14 @@ class EmailChecker:
             email = {}
             substituted_email = self.template_data
             for match in self.m:
+                # finding the word within the regex match
                 label = re.search(r"[a-zA-Z\s]+", match).group(0)
                 if label not in self.header:
+                    # an extra match
                     matches_not_used.append(match)
                 else:
                     index = self.header.index(label)
+                    # editing the email template 
                     substituted_email = substituted_email.replace(match, self.rows[i][index])
                     col_used[index] = True
             if False in col_used:
@@ -212,46 +260,3 @@ class EmailChecker:
             email = self.json_attributes(email, substituted_email, i)
             emails.append(email)
         self.write_json(emails)
-
-    """
-    If multiple distinct patterns are found, the user is asked to confirm each, whether they should be marked correct or not.
-    """
-    def checking_patterns(self) -> None:
-        op, ed = self.extract_op_ed(self.m)
-        
-        if len(op) != 1 or len(ed) != 1:
-            print("Multiple patterns were detected.")
-            print("The initial pattern passed was:", filter)
-            if len(op) != 1:
-                for opening in list(op):
-                    is_replaced = input("Should {} be considered correct? (y/n)".format(opening))
-                    if is_replaced == "n":
-                        op.remove(opening)
-                        for match in self.m:
-                            if opening in match:
-                                self.m.remove(match)
-            if len(ed) != 1:
-                for ending in list(ed):
-                    is_replaced = input("Should {} be considered correct? (y/n)".format(ending))
-                    if is_replaced == "n":
-                        ed.remove(ending)
-                        for match in self.m:
-                            if ending in match:
-                                self.m.remove(match)
-    
-
-    """
-    Updates the CSV in the case of no matching headers and regex matches.
-    """
-    def email_cleaner(self) -> None:
-        for match in self.m:
-            label = re.search(r"[a-zA-Z\s]+", match).group(0)
-            label = label.strip()
-
-            if label not in self.header:
-                if label.lower() in self.lowered_header:
-                    replace = input("Would you like to replace {} from the CSV with {} in the template? (y/n)".format(self.header[self.lowered_header.index(label.lower())], label))
-                    if replace == "y":
-                        self.header[self.lowered_header.index(label)]= label
-                    if replace == "n":
-                        self.m.remove(match)
