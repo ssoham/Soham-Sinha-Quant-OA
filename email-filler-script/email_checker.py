@@ -10,7 +10,6 @@ class EmailChecker:
         self.template_data = template_file
         self.csv_file = csv_file
         self.output_file = output_file
-        print("hi")
 
         with open(csv_file, "r", encoding="utf-8") as csvfile:
             self.csvreader = csv.reader(csvfile)
