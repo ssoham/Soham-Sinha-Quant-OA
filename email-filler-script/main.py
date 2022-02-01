@@ -1,75 +1,64 @@
-import csv
-from re import template
 from tabnanny import check
 import regex as re
-
-with open('sample_data.csv', 'r', encoding='utf-8') as csvfile:
-    csvreader = csv.reader(csvfile)
-    rows = list(csvreader)
-
-headers = rows[0]
-rows.pop(0)
-
-with open('email_template.txt', 'r', encoding='utf-8') as f:
-    template_data = f.read()
-
-user = input("Would you like to pass a RegEx filter or an example (r/e)")
-if user == "r":
-    filter = input(
-        "Default filter is for: __[x]__ (including space checks). If you want to change it, enter a new filter."
-    )
-    filter = "(\_+\s*\_*\[*.*?\]*\_+\s*\_*)" if filter == "" else filter
-    filter = re.compile(filter)
-if user == "e":
-    print("")
-
-m = re.findall(filter, template_data)
-if len(m) == 0:
-    print("incorrect filter given")
-
-ops, ends = set(), set()
-if len(m) > 0:
-    opening_1 = re.search(r".+?(?=[a-zA-Z]\s*)", m[0]).group()
-    closing_1 = re.search(r".+?(?=[a-zA-Z]\s*)", m[0][::-1]).group()[::-1]
-print(closing_1)
-
-for i in range(len(m)):
-    ops.add(re.search(r".+?(?=[a-zA-Z]\s*)", m[i]).group())
-    ends.add(re.search(r".+?(?=[a-zA-Z]\s*)", m[i][::-1]).group()[::-1])
-
-if len(ops) != 1 or len(ends) != 1:
-    print("multiple patterns were detected")
-    print("The regex initially passed was: " + filter.pattern)
-    for i in range(len(ends)):
-        is_replaced = input("should {} be considered as correct? (y/n)".format(list(ends)[i]))
-        if is_replaced == "y":
-            string = list(ends)[i]
-            ends.remove(string)
-            template_data = template_data.replace(string, ends[0])
+import json
+from email_checker import EmailChecker
+import click
 
 
-for i in range(len(rows)):
-    substituted_email = template_data
+if __name__ == "__main__":
+    checker = EmailChecker()
+    filter = checker.pattern_input()
+
+    while len(checker.check_regex_pattern(filter)) < 1:
+        print("No matches for this pattern were found in the template.")
+        user = input("Would you like to retry a pattern (y/n)")
+        if user == "y":
+            filter = checker.pattern_input()
+        else:
+            print("Exiting.")
+            exit()
+
+    m = checker.check_regex_pattern(filter)
+    op, ed = checker.extract_op_ed(m)
+    
+    if len(op) != 1 or len(ed) != 1:
+        print("Multiple patterns were detected.")
+        print("The initial pattern passed was:", filter)
+        if len(op) != 1:
+            for opening in list(op):
+                is_replaced = input("Should {} be considered correct? (y/n)".format(opening))
+                if is_replaced == "n":
+                    op.remove(opening)
+                    for match in m:
+                        if opening in match:
+                            m.remove(match)
+        if len(ed) != 1:
+            for ending in list(ed):
+                is_replaced = input("Should {} be considered correct? (y/n)".format(ending))
+                if is_replaced == "n":
+                    ed.remove(ending)
+                    for match in m:
+                        if ending in match:
+                            m.remove(match)
+        
+        print(m)
+    
+
+    emails = [] 
+    template_data = checker.template_data
+
+    
     for match in m:
         label = re.search(r"[a-zA-Z\s]+", match).group(0)
         label = label.strip()
 
-        if label not in headers:
-            lowered_headers = list(map(lambda x: x.lower(), headers))
-            if label.lower() in lowered_headers:
-                replace = input(
-                    'Should "{}" be replaced with "{}"? (y/n)'.format(
-                        label, headers[lowered_headers.index(label.lower())]
-                    )
-                )
+        if label not in checker.header:
+            if label.lower() in checker.lowered_header:
+                replace = input("Would you like to replace {} from the CSV with {} in the template? (y/n)".format(checker.header[checker.lowered_header.index(label.lower())], label))
                 if replace == "y":
-                    substituted_email = substituted_email.replace(
-                        match, rows[i][lowered_headers.index(label.lower())]
-                    )
-        else:
-            substituted_email = substituted_email.replace(
-                match, rows[i][headers.index(label)]
-            )
+                    checker.header[checker.lowered_header.index(label)]= label
+                if replace == "n":
+                    m.remove(match)
 
-# print(m)
-print(substituted_email)
+
+    checker.write_email()
