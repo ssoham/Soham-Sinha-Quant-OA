@@ -1,6 +1,7 @@
 import csv
 import regex as re
 from typing import Tuple
+from itertools import product
 import json
 
 class EmailChecker:
@@ -28,9 +29,11 @@ class EmailChecker:
     def pattern_input(self) -> None:
         user = input("Would you like to pass a RegEx filter or an example (r/e)")
         if user == "r":
+            self.response = "r"
             self.get_regex_matches()
         elif user == "e":
-            filter = self.user_regex_pattern()
+            self.response = "e"
+            self.user_example_pattern()
         else:
             print("Invalid input. Exiting.")
             exit()
@@ -42,7 +45,9 @@ class EmailChecker:
     """
     def get_regex_matches(self) -> None:
         """
-        This function will take the user input and return a regex pattern.
+        The default regex pattern is decided b the given template and the fact that the pattern is very distinct,
+        it cannot be mistaken for a regular word. Furthermore, the default RegEx pattern is robust enough to handle typos,
+        such as _ _[x]_ _.
         """
         filter = input(
             "Default filter is for: __[x]__ (including checks for accidental spaces). If you want to change it, enter a new filter."
@@ -50,12 +55,30 @@ class EmailChecker:
         filter = "(\_+\s*\_*\[*.*?\]*\_+\s*\_*)" if filter == "" else filter
         filter = re.compile(filter)
         self.m = re.findall(re.compile(filter), self.template_data)
+        
+        while len(self.m) < 1:
+            print("No matches for this pattern were found in the template.")
+            user = input("Would you like to retry a pattern (y/n)")
+            if user == "y":
+                filter = self.pattern_input()
+            else:
+                print("Exiting.")
+                exit()
 
     """
     Asks the user for an example pattern to later extract the opening and ending patterns.
     """
     def user_example_pattern(self) -> None:
         string = input("Entter your opening and ending brackets aroudn a letter: ")
+        self.opening = re.search(r".+?(?=[a-zA-Z]\s*)", string).group()
+        # gets list of typos
+        # - https://stackoverflow.com/a/16479607
+        self.opening = [''.join(reversed(x)).rstrip()
+                        for x in product(*[(c, c+' ') for c in reversed(self.opening)])]
+        print(self.opening)
+        self.ending = re.search(r".+?(?=[a-zA-Z]\s*)", string[::-1]).group()[::-1]
+        self.ending = [''.join(reversed(x)).rstrip()
+                         for x in product(*[(c, c+' ') for c in reversed(self.ending)])]
         pass
 
     """
@@ -124,7 +147,7 @@ class EmailChecker:
     """
     Updates the email based on the user's information. If scertain matches/columns were not used, the user is alerted.
     """
-    def write_email(self) -> str:
+    def write_email(self) -> None:
         emails = []
         for i in range(len(self.rows)):
             col_used = [False]*len(self.header)
@@ -155,6 +178,36 @@ class EmailChecker:
             emails.append(email)
         self.write_json(emails)
 
+    """
+    Writes an email based on a given set of labels (used when the user gives an example)
+
+    @param labels: the possible labels to be used
+
+    @return the email
+    """
+    def write_email(self, labels) -> None:
+        emails = []
+        for i in range(len(self.rows)):
+            col_used = [False]*len(self.header)
+            email = {}
+            substituted_email = self.template_data
+            for label in labels:
+                header_label = re.search(r"[a-zA-Z\s]+", label).group(0)
+                if header_label == ' ':
+                    continue
+                if label not in substituted_email:
+                    col_used[self.lowered_header.index(header_label)] = True
+                else:
+                    substituted_email = substituted_email.replace(label, self.rows[i][self.lowered_header.index(header_label)])
+            if False in col_used:
+                print("The following data columns were not used for User {}:".format(self.rows[i][0]))
+                unused_columns = []
+                for i in range(len(col_used)):
+                    if col_used[i] == False:
+                        unused_columns.append(self.header[i])
+                        # print(checker.header[i]
+                print(unused_columns)
+            # email = self.json_attributes(email, substituted_email, i)
 
     """
     If multiple distinct patterns are found, the user is asked to confirm each, whether they should be marked correct or not.
