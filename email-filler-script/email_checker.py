@@ -70,11 +70,14 @@ class EmailChecker:
     """
     def user_example_pattern(self) -> None:
         string = input("Entter your opening and ending brackets aroudn a letter: ")
+        # gets everything before the first letter
         self.opening = re.search(r".+?(?=[a-zA-Z]\s*)", string).group()
         # gets list of typos
         # - https://stackoverflow.com/a/16479607
         self.opening = [''.join(reversed(x)).rstrip()
                         for x in product(*[(c, c+' ') for c in reversed(self.opening)])]
+
+        #gets everything after the last letter by reversing and applying same regex pattern
         self.ending = re.search(r".+?(?=[a-zA-Z]\s*)", string[::-1]).group()[::-1]
         self.ending = [''.join(reversed(x)).rstrip()
                          for x in product(*[(c, c+' ') for c in reversed(self.ending)])]
@@ -192,8 +195,9 @@ class EmailChecker:
             substituted_email = self.template_data
             for label in labels:
                 header_label = re.search(r"[a-zA-Z\s]+", label).group(0)
+                # an imperfect regex ^, tries to find the next word if it evaluates to a space. 
                 if header_label == ' ':
-                    continue
+                    header_label = re.findall(r'[a-zA-Z\s]+', label)[1]
                 if label not in substituted_email:
                     col_used[self.lowered_header.index(header_label)] = True
                 else:
@@ -204,7 +208,6 @@ class EmailChecker:
                 for i in range(len(col_used)):
                     if col_used[i] == False:
                         unused_columns.append(self.header[i])
-                        # print(checker.header[i]
                 print(unused_columns)
             email = self.json_attributes(email, substituted_email, i)
             emails.append(email)
