@@ -75,7 +75,6 @@ class EmailChecker:
         # - https://stackoverflow.com/a/16479607
         self.opening = [''.join(reversed(x)).rstrip()
                         for x in product(*[(c, c+' ') for c in reversed(self.opening)])]
-        print(self.opening)
         self.ending = re.search(r".+?(?=[a-zA-Z]\s*)", string[::-1]).group()[::-1]
         self.ending = [''.join(reversed(x)).rstrip()
                          for x in product(*[(c, c+' ') for c in reversed(self.ending)])]
@@ -207,7 +206,9 @@ class EmailChecker:
                         unused_columns.append(self.header[i])
                         # print(checker.header[i]
                 print(unused_columns)
-            # email = self.json_attributes(email, substituted_email, i)
+            email = self.json_attributes(email, substituted_email, i)
+            emails.append(email)
+        self.write_json(emails)
 
     """
     If multiple distinct patterns are found, the user is asked to confirm each, whether they should be marked correct or not.
