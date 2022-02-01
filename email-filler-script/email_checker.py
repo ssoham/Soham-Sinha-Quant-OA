@@ -1,37 +1,46 @@
 import csv
 import regex as re
 from typing import Tuple
+import json
 
 class EmailChecker:
-    def __init__(self) -> None:
-        with open("sample_data.csv", "r", encoding="utf-8") as csvfile:
+
+    def __init__(self, template_file, csv_file, output_file) -> None:
+        self.template_data = template_file
+        self.csv_file = csv_file
+        self.output_file = output_file
+        print("hi")
+
+        with open(csv_file, "r", encoding="utf-8") as csvfile:
             self.csvreader = csv.reader(csvfile)
             self.rows = list(self.csvreader)
         self.header = self.rows[0]
         self.lowered_header = list(map(lambda x: x.lower(), self.header))
         self.rows.pop(0)
 
-        with open("email_template.txt", "r") as f:
+        with open(template_file, "r") as f:
             self.template_data = f.read()
 
-    def pattern_input(self) -> str:
+
+    """
+    Giving the user the option for what they want to enter.
+    """
+    def pattern_input(self) -> None:
         user = input("Would you like to pass a RegEx filter or an example (r/e)")
         if user == "r":
-            filter = self.user_regex_pattern()
+            self.get_regex_matches()
         elif user == "e":
             filter = self.user_regex_pattern()
         else:
             print("Invalid input. Exiting.")
             exit()
-        return filter
-        
-    def retrieve_subject(self) -> str:
-        """
-        This function will retrieve the subject line from the email template.
-        """
-        return self.template_data.split("Subject: ")[1].split("\n")[0]
+        pass
+    
 
-    def user_regex_pattern(self) -> str:
+    """
+    Asks the user for a regex pattern and locates all the matches within the file.
+    """
+    def get_regex_matches(self) -> None:
         """
         This function will take the user input and return a regex pattern.
         """
@@ -39,16 +48,21 @@ class EmailChecker:
             "Default filter is for: __[x]__ (including checks for accidental spaces). If you want to change it, enter a new filter."
         )
         filter = "(\_+\s*\_*\[*.*?\]*\_+\s*\_*)" if filter == "" else filter
-        return filter
-
-    def check_regex_pattern(self, filter) -> list:
-        """
-        This function will check the regex pattern against the email template.
-        """
         filter = re.compile(filter)
-        m = re.findall(filter, self.template_data)
-        return m
-    
+        self.m = re.findall(re.compile(filter), self.template_data)
+
+    """
+    Asks the user for an example pattern to later extract the opening and ending patterns.
+    """
+    def user_example_pattern(self) -> None:
+        string = input("Entter your opening and ending brackets aroudn a letter: ")
+        pass
+
+    """
+    Adds all the matches to a set. Will be used to check if all the matches should be used.
+
+    @param m: the matches to be analyzed
+    """
     def extract_op_ed(self, m) -> Tuple[set, set]:
         """
         This function will extract the operator and editor from the regex pattern.
@@ -59,28 +73,65 @@ class EmailChecker:
             ed.add(re.search(r".+?(?=[a-zA-Z]\s*)", m[i][::-1]).group()[::-1])
         return op, ed
     
+    """
+    Gets of the email from the given template.
+
+    @return the subject of the email
+    """
+    def retrieve_subject(self) -> str:
+        """
+        This function will retrieve the subject line from the email template.
+        """
+        return self.template_data.split("Subject: ")[1].split("\n")[0]
+    
+    """
+    Gets body of the email from the given template.
+
+    @param email: the email to be written
+    
+    @return the email body
+    """
     def retrieve_body(self, email) -> str:
         body_index = email.index("Dear")
         return email[body_index:]
 
-    def write_json(self, email, written_email, user) -> None:
+    """
+    Writes the list of emails to the indicated JSON file.
+    """
+    def write_json(self, emails) -> None:
+        f = open(self.output_file, "w")
+        json.dump(emails, f)
+        pass
+
+    """
+    Updates the specific JSON object based on the user's information.
+    
+    @param email: the JSON object to be updated
+    @param written_email: the edited email
+    @param user: the user's index in the csv file
+
+    @return the updated JSON upject
+    """
+    def json_attributes(self, email, written_email, user) -> dict:
         email["body"] = self.retrieve_body(written_email)
         email["subject"] = self.retrieve_subject()
         email["to"] = self.rows[user][self.header.index("to")]
         email["cc"] = self.rows[user][self.header.index("cc")]
         email["bcc"] = self.rows[user][self.lowered_header.index("bcc")]
 
-        f = open("email_data.json", "w")
-        json.dump(email, f)
-        pass
+        return email
 
+    """
+    Updates the email based on the user's information. If scertain matches/columns were not used, the user is alerted.
+    """
     def write_email(self) -> str:
+        emails = []
         for i in range(len(self.rows)):
             col_used = [False]*len(self.header)
             matches_not_used = []
             email = {}
             substituted_email = self.template_data
-            for match in m:
+            for match in self.m:
                 label = re.search(r"[a-zA-Z\s]+", match).group(0)
                 if label not in self.header:
                     matches_not_used.append(match)
@@ -99,4 +150,51 @@ class EmailChecker:
             if len(matches_not_used) != 0:
                 print("The following matches were not used for User {}:".format(self.rows[i][0]))
                 print(matches_not_used)
-            self.write_json(email, substituted_email, i)
+            
+            email = self.json_attributes(email, substituted_email, i)
+            emails.append(email)
+        self.write_json(emails)
+
+
+    """
+    If multiple distinct patterns are found, the user is asked to confirm each, whether they should be marked correct or not.
+    """
+    def checking_patterns(self) -> None:
+        op, ed = self.extract_op_ed(self.m)
+        
+        if len(op) != 1 or len(ed) != 1:
+            print("Multiple patterns were detected.")
+            print("The initial pattern passed was:", filter)
+            if len(op) != 1:
+                for opening in list(op):
+                    is_replaced = input("Should {} be considered correct? (y/n)".format(opening))
+                    if is_replaced == "n":
+                        op.remove(opening)
+                        for match in self.m:
+                            if opening in match:
+                                self.m.remove(match)
+            if len(ed) != 1:
+                for ending in list(ed):
+                    is_replaced = input("Should {} be considered correct? (y/n)".format(ending))
+                    if is_replaced == "n":
+                        ed.remove(ending)
+                        for match in self.m:
+                            if ending in match:
+                                self.m.remove(match)
+    
+
+    """
+    Updates the CSV in the case of no matching headers and regex matches.
+    """
+    def email_cleaner(self) -> None:
+        for match in self.m:
+            label = re.search(r"[a-zA-Z\s]+", match).group(0)
+            label = label.strip()
+
+            if label not in self.header:
+                if label.lower() in self.lowered_header:
+                    replace = input("Would you like to replace {} from the CSV with {} in the template? (y/n)".format(self.header[self.lowered_header.index(label.lower())], label))
+                    if replace == "y":
+                        self.header[self.lowered_header.index(label)]= label
+                    if replace == "n":
+                        self.m.remove(match)
